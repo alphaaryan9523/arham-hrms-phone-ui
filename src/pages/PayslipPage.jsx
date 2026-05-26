@@ -8,6 +8,8 @@ import AppHeader from '../components/AppHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import LoadingSpinner from '../components/LoadingSpinner.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
+import { useToast } from '../context/ToastContext.jsx';
+import { wsService } from '../services/wsService.js';
 import { formatCurrency } from '../utils/formatCurrency.js';
 import { formatDate } from '../utils/formatDate.js';
 import { downloadPayslipPdf, getPdfErrorMessage, viewPayslipPdf } from '../utils/pdfDownload.js';
@@ -21,6 +23,7 @@ function getYearOptions() {
 }
 
 export default function PayslipPage() {
+  const showToast = useToast();
   const [items, setItems] = useState([]);
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -62,6 +65,14 @@ export default function PayslipPage() {
   useEffect(() => {
     loadPayslips();
   }, []);
+
+  useEffect(() => {
+    const unsub = wsService.on('payslip_generated', () => {
+      showToast('New payslip generated!', 'success');
+      loadPayslips();
+    });
+    return unsub;
+  }, [showToast]);
 
   async function handleViewPdf(payslip) {
     setActiveAction({ id: payslip.id, type: 'view' });

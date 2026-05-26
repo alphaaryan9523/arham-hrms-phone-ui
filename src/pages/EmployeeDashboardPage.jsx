@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarDays, Clock, FileText, LifeBuoy, LogOut, WalletCards } from 'lucide-react';
+import { Bell, CalendarDays, Clock, FileText, LogOut, Receipt, WalletCards } from 'lucide-react';
+import { announcementApi } from '../api/announcementApi.js';
 import { attendanceApi } from '../api/attendanceApi.js';
 import { employeeApi } from '../api/employeeApi.js';
 import { getApiErrorMessage } from '../api/axiosClient.js';
 import { leaveApi } from '../api/leaveApi.js';
 import { payslipApi } from '../api/payslipApi.js';
-import { ticketApi } from '../api/ticketApi.js';
 import AppButton from '../components/AppButton.jsx';
 import AppCard from '../components/AppCard.jsx';
 import AppHeader from '../components/AppHeader.jsx';
@@ -15,28 +15,35 @@ import LoadingSpinner from '../components/LoadingSpinner.jsx';
 import QuickActionCard from '../components/QuickActionCard.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
-import { formatDate, formatTime, todayLabel } from '../utils/formatDate.js';
+import { useToast } from '../context/ToastContext.jsx';
+import { wsService } from '../services/wsService.js';
 import { formatCurrency } from '../utils/formatCurrency.js';
+import { formatDate, formatTime, todayLabel } from '../utils/formatDate.js';
 import { ATTENDANCE_STATUS, normalizeAttendanceStatus, normalizeList, titleFromStatus } from '../utils/statusMapper.js';
 
 export default function EmployeeDashboardPage() {
   const { user, logout } = useAuth();
-  const [state, setState] = useState({ loading: true, error: '', success: '', employee: user, today: null, history: [], balance: [], leaves: [], tickets: [], payslips: [] });
+  const showToast = useToast();
+  const [state, setState] = useState({
+    loading: true, error: '', success: '',
+    employee: user, today: null, history: [],
+    balance: [], leaves: [], payslips: [], announcements: []
+  });
   const [clocking, setClocking] = useState(false);
 
   async function loadDashboard() {
-    setState((next) => ({ ...next, loading: true, error: '', success: '' }));
+    setState((s) => ({ ...s, loading: true, error: '', success: '' }));
     try {
-      const [employee, today, history, balance, leaves, tickets, payslips] = await Promise.allSettled([
+      const [employee, today, history, balance, leaves, payslips, announcements] = await Promise.allSettled([
         employeeApi.me(),
         attendanceApi.getTodayAttendance(),
         attendanceApi.getMyAttendance(),
         leaveApi.getLeaveBalance(),
         leaveApi.getMyLeaves(),
-        ticketApi.getMyTickets(),
-        payslipApi.getMyPayslips()
+        payslipApi.getMyPayslips(),
+        announcementApi.getAnnouncements()
       ]);
-      const firstError = [employee, today, history, balance, leaves, tickets, payslips].find((result) => result.status === 'rejected');
+      const firstError = [employee, today, history, balance, leaves, payslips].find((r) => r.status === 'rejected');
       setState({
         loading: false,
         error: firstError ? getApiErrorMessage(firstError.reason) : '',
@@ -46,11 +53,11 @@ export default function EmployeeDashboardPage() {
         history: history.status === 'fulfilled' ? normalizeList(history.value).slice(0, 3) : [],
         balance: balance.status === 'fulfilled' ? normalizeList(balance.value) : [],
         leaves: leaves.status === 'fulfilled' ? normalizeList(leaves.value) : [],
-        tickets: tickets.status === 'fulfilled' ? normalizeList(tickets.value) : [],
-        payslips: payslips.status === 'fulfilled' ? normalizeList(payslips.value) : []
+        payslips: payslips.status === 'fulfilled' ? normalizeList(payslips.value) : [],
+        announcements: announcements.status === 'fulfilled' ? normalizeList(announcements.value) : []
       });
     } catch (error) {
-      setState((next) => ({ ...next, loading: false, error: getApiErrorMessage(error), employee: next.employee || user }));
+      setState((s) => ({ ...s, loading: false, error: getApiErrorMessage(error), employee: s.employee || user }));
     }
   }
 
@@ -58,27 +65,60 @@ export default function EmployeeDashboardPage() {
     loadDashboard();
   }, []);
 
+  // WebSocket: live attendance update
+  useEffect(() => {
+    const unsub = wsService.on('attendance_update', (data) => {
+      const updated = data.attendance || data;
+      setState((s) => ({ ...s, today: { ...s.today, ...updated } }));
+    });
+    return unsub;
+  }, []);
+
+  // WebSocket: new announcement
+  useEffect(() => {
+    const unsub = wsService.on('announcement_created', (data) => {
+      const a = data.announcement || data;
+      if (!a?.id) return;
+      setState((s) => {
+        if (s.announcements.find((x) => x.id === a.id)) return s;
+        return { ...s, announcements: [a, ...s.announcements] };
+      });
+      showToast(`New announcement: ${a.title}`, 'info');
+    });
+    return unsub;
+  }, [showToast]);
+
+  // WebSocket: payslip generated
+  useEffect(() => {
+    const unsub = wsService.on('payslip_generated', () => {
+      showToast('New payslip generated!', 'success');
+      payslipApi.getMyPayslips()
+        .then((data) => setState((s) => ({ ...s, payslips: normalizeList(data) })))
+        .catch(() => {});
+    });
+    return unsub;
+  }, [showToast]);
+
   async function handleClock() {
     if (clocking) return;
     setClocking(true);
-    setState((next) => ({ ...next, error: '', success: '' }));
+    setState((s) => ({ ...s, error: '', success: '' }));
     try {
       const status = normalizeAttendanceStatus(state.today);
-      // TODO: Add Capacitor Geolocation payload here once backend accepts location fields and native permissions are configured.
       if (status === ATTENDANCE_STATUS.CLOCKED_IN) {
         await attendanceApi.clockOut();
       } else {
         await attendanceApi.clockIn();
       }
       const refreshed = await attendanceApi.getTodayAttendance();
-      setState((next) => ({
-        ...next,
-        today: refreshed,
-        error: '',
-        success: normalizeAttendanceStatus(refreshed) === ATTENDANCE_STATUS.CLOCKED_OUT ? 'Clocked out successfully.' : 'Clocked in successfully.'
+      setState((s) => ({
+        ...s, today: refreshed,
+        success: normalizeAttendanceStatus(refreshed) === ATTENDANCE_STATUS.CLOCKED_OUT
+          ? 'Clocked out successfully.'
+          : 'Clocked in successfully.'
       }));
     } catch (error) {
-      setState((next) => ({ ...next, error: getApiErrorMessage(error) }));
+      setState((s) => ({ ...s, error: getApiErrorMessage(error) }));
     } finally {
       setClocking(false);
     }
@@ -86,14 +126,14 @@ export default function EmployeeDashboardPage() {
 
   const employee = state.employee || user || {};
   const status = normalizeAttendanceStatus(state.today);
-  const pendingLeaves = state.leaves.filter((item) => String(item.status).toLowerCase() === 'pending').slice(0, 2);
-  const openTickets = state.tickets.filter((item) => !['closed', 'resolved'].includes(String(item.status).toLowerCase())).slice(0, 2);
+  const pendingLeaves = state.leaves.filter((l) => String(l.status).toUpperCase() === 'PENDING').slice(0, 2);
   const latestPayslip = state.payslips[0];
+  const latestAnnouncement = state.announcements[0];
 
   return (
     <>
       <AppHeader
-        title={`Hi, ${employee.first_name || employee.name || 'Employee'}`}
+        title={`Hi, ${employee.first_name || employee.name?.split(' ')[0] || 'Employee'}`}
         subtitle={todayLabel()}
         action={<button className="icon-button" type="button" onClick={logout} aria-label="Logout"><LogOut size={21} /></button>}
       />
@@ -113,6 +153,19 @@ export default function EmployeeDashboardPage() {
         </div>
       </AppCard>
 
+      {latestAnnouncement ? (
+        <AppCard className="announcement-card">
+          <div className="card-heading">
+            <div>
+              <p className="eyebrow">Announcement</p>
+              <h2>{latestAnnouncement.title}</h2>
+            </div>
+            <Link to="/announcements" aria-label="All announcements"><Bell size={20} /></Link>
+          </div>
+          <p className="muted">{latestAnnouncement.message}</p>
+        </AppCard>
+      ) : null}
+
       <AppCard className="today-card">
         <div className="card-heading">
           <div><p className="eyebrow">Today</p><h2>{formatDate(new Date())}</h2></div>
@@ -131,8 +184,9 @@ export default function EmployeeDashboardPage() {
       <div className="quick-grid">
         <QuickActionCard to="/attendance/history" icon={Clock} label="History" caption="Attendance" />
         <QuickActionCard to="/leave/balance" icon={WalletCards} label="Balance" caption="Leave" />
+        <QuickActionCard to="/reimbursements" icon={Receipt} label="Reimburse" caption="Expenses" />
+        <QuickActionCard to="/announcements" icon={Bell} label="Notices" caption="Announcements" />
         <QuickActionCard to="/shifts" icon={CalendarDays} label="Shifts" caption="Schedule" />
-        <QuickActionCard to="/tickets/create" icon={LifeBuoy} label="Ticket" caption="Helpdesk" />
         <QuickActionCard to="/payslips" icon={FileText} label="Payslip" caption="Payroll" />
       </div>
 
@@ -140,7 +194,8 @@ export default function EmployeeDashboardPage() {
         <div className="card-heading"><h2>Leave balance</h2><Link to="/leave/balance">View</Link></div>
         {state.balance.length ? state.balance.slice(0, 3).map((item) => (
           <div className="list-row" key={item.id || item.leave_type || item.type}>
-            <span>{item.leave_type || item.type}</span><strong>{item.remaining ?? item.balance ?? 0} left</strong>
+            <span>{item.leave_type || item.type}</span>
+            <strong>{item.remaining ?? item.balance ?? 0} left</strong>
           </div>
         )) : !state.error ? <EmptyState title="No balance found" /> : null}
       </AppCard>
@@ -149,7 +204,8 @@ export default function EmployeeDashboardPage() {
         <div className="card-heading"><h2>Recent attendance</h2><Link to="/attendance/history">View</Link></div>
         {state.history.length ? state.history.map((item) => (
           <div className="list-row" key={item.id || item.date}>
-            <span>{formatDate(item.date)}</span><StatusBadge status={titleFromStatus(normalizeAttendanceStatus(item))} />
+            <span>{formatDate(item.date)}</span>
+            <StatusBadge status={titleFromStatus(normalizeAttendanceStatus(item))} />
           </div>
         )) : !state.error ? <EmptyState title="No attendance yet" /> : null}
       </AppCard>
@@ -161,15 +217,6 @@ export default function EmployeeDashboardPage() {
             <span>{item.leave_type || item.type}</span><StatusBadge status={item.status} />
           </div>
         )) : !state.error ? <EmptyState title="No pending leave" /> : null}
-      </AppCard>
-
-      <AppCard>
-        <div className="card-heading"><h2>Open tickets</h2><Link to="/tickets">View</Link></div>
-        {openTickets.length ? openTickets.map((item) => (
-          <div className="list-row" key={item.id}>
-            <span>{item.subject}</span><StatusBadge status={item.status || 'open'} />
-          </div>
-        )) : !state.error ? <EmptyState title="No open tickets" /> : null}
       </AppCard>
 
       <AppCard>

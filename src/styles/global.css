@@ -429,6 +429,63 @@ a { color: inherit; text-decoration: none; }
   font-weight: 800;
 }
 
+/* ── Toast notifications ── */
+.toast-container {
+  position: fixed;
+  bottom: calc(76px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(calc(100% - 24px), 496px);
+  display: grid;
+  gap: 8px;
+  z-index: 100;
+  pointer-events: none;
+}
+.toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  pointer-events: all;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.14);
+  animation: toast-in 0.2s ease;
+}
+.toast--info    { background: #1e293b; color: #fff; }
+.toast--success { background: #087443; color: #fff; }
+.toast--error   { background: var(--danger); color: #fff; }
+.toast--warning { background: var(--warning); color: #fff; }
+.toast__close {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 20px;
+  line-height: 1;
+  padding: 0 2px;
+  opacity: 0.75;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+@keyframes toast-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ── Announcement card ── */
+.announcement-card { background: var(--surface-blue); border-color: #bfdbfe; }
+.announcement-card .eyebrow { color: #1d4ed8; }
+
+/* ── WS status dot ── */
+.ws-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #94a3b8;
+  display: inline-block;
+  margin-right: 4px;
+}
+.ws-dot--live { background: var(--success); }
+
 @media (max-width: 360px) {
   .app-main { padding-left: 12px; padding-right: 12px; }
   .quick-grid { grid-template-columns: 1fr; }

@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import BottomNav from '../components/BottomNav.jsx';
 import ProtectedRoute from './ProtectedRoute.jsx';
+import AnnouncementsPage from '../pages/AnnouncementsPage.jsx';
 import AttendanceHistoryPage from '../pages/AttendanceHistoryPage.jsx';
 import AttendancePage from '../pages/AttendancePage.jsx';
 import ChangePasswordPage from '../pages/ChangePasswordPage.jsx';
@@ -12,6 +13,7 @@ import LeaveHistoryPage from '../pages/LeaveHistoryPage.jsx';
 import LoginPage from '../pages/LoginPage.jsx';
 import PayslipPage from '../pages/PayslipPage.jsx';
 import ProfilePage from '../pages/ProfilePage.jsx';
+import ReimbursementPage from '../pages/ReimbursementPage.jsx';
 import SettingsPage from '../pages/SettingsPage.jsx';
 import ShiftPage from '../pages/ShiftPage.jsx';
 import TicketListPage from '../pages/TicketListPage.jsx';
@@ -33,6 +35,8 @@ function AppShell() {
           <Route path="/tickets" element={<TicketListPage />} />
           <Route path="/tickets/create" element={<CreateTicketPage />} />
           <Route path="/payslips" element={<PayslipPage />} />
+          <Route path="/reimbursements" element={<ReimbursementPage />} />
+          <Route path="/announcements" element={<AnnouncementsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>

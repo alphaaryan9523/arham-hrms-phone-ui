@@ -7,6 +7,7 @@ import AppCard from '../components/AppCard.jsx';
 import AppHeader from '../components/AppHeader.jsx';
 import LoadingSpinner from '../components/LoadingSpinner.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
+import { wsService } from '../services/wsService.js';
 import { formatDate, formatTime } from '../utils/formatDate.js';
 import { ATTENDANCE_STATUS, normalizeAttendanceStatus } from '../utils/statusMapper.js';
 
@@ -32,13 +33,20 @@ export default function AttendancePage() {
     loadToday();
   }, []);
 
+  useEffect(() => {
+    const unsub = wsService.on('attendance_update', (data) => {
+      const updated = data.attendance || data;
+      setToday((prev) => ({ ...prev, ...updated }));
+    });
+    return unsub;
+  }, []);
+
   async function handleClock() {
     if (clocking) return;
     setClocking(true);
     setMessage('');
     setError('');
     try {
-      // TODO: Enable Capacitor Geolocation here only after backend confirms latitude/longitude payload support.
       if (normalizeAttendanceStatus(today) === ATTENDANCE_STATUS.CLOCKED_IN) {
         await attendanceApi.clockOut();
       } else {

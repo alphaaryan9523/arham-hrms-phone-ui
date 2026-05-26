@@ -9,11 +9,14 @@ import AppHeader from '../components/AppHeader.jsx';
 import EmptyState from '../components/EmptyState.jsx';
 import LoadingSpinner from '../components/LoadingSpinner.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
+import { useToast } from '../context/ToastContext.jsx';
+import { wsService } from '../services/wsService.js';
 import { formatDate } from '../utils/formatDate.js';
 import { normalizeList } from '../utils/statusMapper.js';
 
 export default function LeaveHistoryPage() {
   const location = useLocation();
+  const showToast = useToast();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -32,6 +35,25 @@ export default function LeaveHistoryPage() {
     loadLeaves();
     setSuccess(location.state?.success || '');
   }, [location.key]);
+
+  useEffect(() => {
+    const unsub = wsService.on('leave_request_update', (data) => {
+      const updated = data.leave || data;
+      const id = updated?.id;
+      if (!id) return;
+      setItems((prev) => {
+        const existed = prev.find((l) => l.id === id);
+        const newStatus = String(updated.status || '').toUpperCase();
+        if (existed && existed.status !== updated.status) {
+          if (newStatus === 'APPROVED') showToast('Leave request approved!', 'success');
+          else if (newStatus === 'REJECTED') showToast('Leave request rejected.', 'error');
+        }
+        if (existed) return prev.map((l) => l.id === id ? { ...l, ...updated } : l);
+        return [updated, ...prev];
+      });
+    });
+    return unsub;
+  }, [showToast]);
 
   return (
     <>

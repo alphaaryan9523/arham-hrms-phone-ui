@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { authApi } from '../api/authApi.js';
 import { getApiErrorMessage } from '../api/axiosClient.js';
+import { wsService } from '../services/wsService.js';
 import {
   clearSessionStorage,
   getStoredUser,
@@ -54,6 +55,8 @@ export function AuthProvider({ children }) {
       }
       setUser(nextUser);
       await setStoredUser(nextUser);
+      const empCode = nextUser?.employee_code || nextUser?.code;
+      if (empCode && token) wsService.connect(empCode, token);
     } catch (error) {
       await clearSessionStorage();
       setUser(null);
@@ -86,10 +89,13 @@ export function AuthProvider({ children }) {
     await setStoredUser(loginUser);
     await setStoredRole(role);
     setUser(loginUser);
+    const empCode = loginUser?.employee_code || loginUser?.code;
+    if (empCode) wsService.connect(empCode, token);
     return { user: loginUser, mustChangePassword };
   }, []);
 
   const logout = useCallback(async () => {
+    wsService.disconnect();
     try {
       await authApi.logout();
     } catch {

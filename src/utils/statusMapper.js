@@ -5,7 +5,18 @@ export const ATTENDANCE_STATUS = {
 };
 
 export function normalizeList(data) {
-  return Array.isArray(data) ? data : data?.results || data?.payslips || data?.items || data?.data || [];
+  return Array.isArray(data)
+    ? data
+    : data?.results ||
+      data?.records ||
+      data?.payslips ||
+      data?.leaves ||
+      data?.balances ||
+      data?.reimbursements ||
+      data?.announcements ||
+      data?.items ||
+      data?.data ||
+      [];
 }
 
 export function normalizeAttendanceStatus(record) {
