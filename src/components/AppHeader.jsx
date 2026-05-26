@@ -9,7 +9,7 @@ export default function AppHeader({ title, subtitle, back = false, action }) {
       <div className="app-header__row">
         {back ? (
           <button className="icon-button" type="button" onClick={() => navigate(-1)} aria-label="Go back">
-            <ArrowLeft size={22} />
+            <ArrowLeft size={20} strokeWidth={2} />
           </button>
         ) : null}
         <div className="app-header__text">
